@@ -6,13 +6,12 @@ Run from the root folder with either 'python setup.py test' or
 'py.test test/test_sparkline.py'.
 """
 
-from __future__ import unicode_literals, print_function
+from __future__ import print_function, unicode_literals
 
-import pytest
 
 import re
 
-from sparklines import batch, sparklines, scale_values
+from sparklines import batch, scale_values, sparklines, transpose_array
 from sparklines.__main__ import test_valid_number as is_valid_number
 
 
@@ -72,6 +71,11 @@ def test_batch():
     assert batches == [[0, 1, 2]]
 
 
+def test_transpose_array():
+    res = transpose_array([['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9']])
+    exp = [['3', '6', '9'], ['2', '5', '8'], ['1', '4', '7']]
+    assert res == exp, (res, exp)
+
 def test_scale_pi():
     "Test scale Pi."
 
@@ -85,7 +89,7 @@ def test_pi():
 
     res = sparklines([3, 1, 4, 1, 5, 9, 2, 6])
     exp = ['▃▁▄▁▄█▂▅']
-    assert res == exp
+    assert res == exp, (res, exp)
 
 
 def test_minmax():
@@ -93,7 +97,7 @@ def test_minmax():
 
     res = sparklines([1, 8])
     exp = ['▁█'] # 1, 8
-    assert res == exp
+    assert res == exp, (res, exp)
 
 
 def test_rounding0():
@@ -183,7 +187,7 @@ def test_wrap_escaping_consistency():
 def test_wrap_escaping():
     res = sparklines([1, 10, 1, 10, 1, 10], emph=['green:ge:2.0'], wrap=3)
     exp = ["\x1b[37m▁\x1b[0m\x1b[32m█\x1b[0m\x1b[37m▁\x1b[0m", "", "\x1b[32m█\x1b[0m\x1b[37m▁\x1b[0m\x1b[32m█\x1b[0m"]
-    assert exp == res, (exp, res)
+    assert exp == res
 
 
 def strip_ansi(text):

@@ -9,7 +9,6 @@ Please read the file README.rst for more information.
 
 from __future__ import unicode_literals, print_function, division
 
-import itertools
 import re
 import sys
 import warnings
@@ -53,29 +52,26 @@ def _check_negatives(numbers):
         warnings.warn(msg)
 
 
-def _check_emphasis(numbers, emph):
-    "Find index postions in list of numbers to be emphasized according to emph."
+def _get_color(emph, n):
+    "Return true if this number should be emphasized"
+    if emph is None:
+        return None
 
     pat = '(\w+)\:(eq|gt|ge|lt|le)\:(.+)'
-    # find values to be highlighted
-    emphasized = {} # index: color
-    for (i, n) in enumerate(numbers):
-        if n is None:
-            continue
-        for em in emph:
-            color, op, value = re.match(pat, em).groups()
-            value = float(value)
-            if op == 'eq' and n == value:
-                emphasized[i] = color
-            elif op == 'gt' and n > value:
-                emphasized[i] = color
-            elif op == 'ge' and n >= value:
-                emphasized[i] = color
-            elif op == 'lt' and n < value:
-                emphasized[i] = color
-            elif op == 'le' and n <= value:
-                emphasized[i] = color
-    return emphasized
+    for em in emph:
+        color, op, value = re.match(pat, em).groups()
+        value = float(value)
+        if op == 'eq' and n == value:
+            return color
+        elif op == 'gt' and n > value:
+            return color
+        elif op == 'ge' and n >= value:
+            return color
+        elif op == 'lt' and n < value:
+            return color
+        elif op == 'le' and n <= value:
+            return color
+    return 'white'
 
 
 def scale_values(numbers, num_lines=1, minimum=None, maximum=None):
@@ -139,35 +135,48 @@ def sparklines(numbers=[], num_lines=1, emph=None, verbose=False,
     # raise warning for negative numbers
     _check_negatives(numbers)
 
-    values = scale_values(numbers, num_lines=num_lines, minimum=minimum, maximum=maximum)
+    display_values = scale_values(numbers, num_lines=num_lines, minimum=minimum, maximum=maximum)
+    subgraphs_lines = []
+    for subgraph_pairs in batch(wrap, zip(numbers, display_values)):
+        columns = []
+        for number, value in subgraph_pairs:
+            column = _render_column(value, num_lines)
+            color = _get_color(emph, number) if (HAVE_TERMCOLOR and emph) else None
+            column = [_color_string(color, pixel) for pixel in column]
+            columns.append(column)
 
-    # find values to be highlighted
-    emphasized = _check_emphasis(numbers, emph) if emph else {}
+        subgraph_rows = transpose_array(columns)
+        subgraph_lines = list(map(''.join, subgraph_rows))
+        subgraphs_lines.append(subgraph_lines)
 
-    point_index = 0
-    subgraphs = []
-    for subgraph_values in batch(wrap, values):
-        multi_values = []
-        for i in range(num_lines):
-            multi_values.append([
-                min(v, 8) if not v is None else None
-                for v in subgraph_values
-            ])
-            subgraph_values = [max(0, v-8) if not v is None else None for v in subgraph_values]
-        multi_values.reverse()
-        lines = []
-        for subgraph_values in multi_values:
-            if HAVE_TERMCOLOR and emphasized:
-                tc = termcolor.colored
-                res = [tc(blocks[int(v)], emphasized.get(point_index + i, 'white')) if not v is None else ' ' for (i, v) in enumerate(subgraph_values)]
-            else:
-                res = [blocks[int(v)] if not v is None else ' ' for v in subgraph_values]
-            lines.append(''.join(res))
-        subgraphs.append(lines)
-        point_index += len(subgraph_values)
+    lines = list_join('', subgraphs_lines)
+    return lines
 
-    return list_join('', subgraphs)
 
+def _render_column(value, num_lines):
+    pixels = []
+    for i in range(num_lines):
+        block_code = min(max(0, value - 8*i), 8)
+        pixels.append(blocks[block_code])
+    return pixels
+
+
+def _color_string(color, string):
+    if not color:
+        return string
+    else:
+        return ''.join(termcolor.colored(c, color) for c in string)
+
+
+def list_join(separator, lists):
+    result = []
+    for lst, _next in zip(lists[:], lists[1:]):
+        result.extend(lst)
+        result.append(separator)
+
+    if lists:
+        result.extend(lists[-1])
+    return result
 
 
 def batch(batch_size, items):
@@ -181,15 +190,11 @@ def batch(batch_size, items):
     return [[item for item in group if item != MISSING] for group in groups]
 
 
-def list_join(separator, lists):
-    result = []
-    for lst, _next in zip(lists[:], lists[1:]):
-        result.extend(lst)
-        result.append(separator)
-
-    if lists:
-        result.extend(lists[-1])
-    return result
+def transpose_array(array):
+    line_lengths = set(map(len, array))
+    if len(line_lengths) != 1:
+        raise Exception('Inconsistent line lengths {!r}'.format(line_lengths))
+    return list(reversed(list(map(list, zip(*array)))))
 
 
 def demo(nums=[]):
